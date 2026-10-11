@@ -8,11 +8,13 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import io  # noqa: E402
 import json  # noqa: E402
+import tarfile  # noqa: E402
 
 from PIL import Image  # noqa: E402
 
-from pklot import prepare_data  # noqa: E402
+from pklot import count_eval, prepare_data  # noqa: E402
 from pklot.occupancy import Occupancy, classify, count_spaces  # noqa: E402
 from pklot.train_yolo import write_data_yaml  # noqa: E402
 
@@ -104,6 +106,43 @@ class PrepareDataTests(unittest.TestCase):
             self.assertEqual([c["id"] for c in coco["categories"]], [1, 2])
             self.assertEqual(len(coco["annotations"]), 2 * len(coco["images"]))
             self.assertTrue((out / "data.yaml").exists())
+
+    def test_prepare_from_tarball_skips_the_segmented_copy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            jpg = io.BytesIO()
+            Image.new("RGB", (64, 36)).save(jpg, "JPEG")
+            with tarfile.open(tmp / "PKLot.tar.gz", "w:gz") as archive:
+                def add(name, data):
+                    info = tarfile.TarInfo(name)
+                    info.size = len(data)
+                    archive.addfile(info, io.BytesIO(data))
+                for day in range(1, 11):
+                    base = f"PKLot/PKLot/LOT/Sunny/2012-09-{day:02d}/f"
+                    add(base + ".jpg", jpg.getvalue())
+                    add(base + ".xml", XML.encode())
+                add("PKLot/PKLotSegmented/LOT/Sunny/2012-09-01/Empty/crop#001.jpg", jpg.getvalue())  # must be ignored
+            out = prepare_data.prepare(tmp / "out" / "pklot", tmp / "PKLot.tar.gz")
+            images = [p for s in prepare_data.SPLITS for p in (out / s / "images").glob("*.jpg")]
+            self.assertEqual(len(images), 10)
+            self.assertFalse((tmp / "out" / "_pklot_staging").exists())  # staging cleaned up
+            self.assertEqual(prepare_data.prepare(out), out)  # second call is a no-op
+
+
+class CountEvalTests(unittest.TestCase):
+    def test_true_counts_reads_yolo_labels(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            label = Path(tmp) / "a.txt"
+            label.write_text("0 0.1 0.1 0.1 0.1\n1 0.2 0.2 0.1 0.1\n1 0.3 0.3 0.1 0.1\n")
+            self.assertEqual(count_eval.true_counts(label), (1, 2))
+
+    def test_summarize_per_lot(self):
+        rows = [("A", 5, 5, 5, 5), ("A", 4, 6, 3, 7), ("B", 2, 8, 2, 8)]  # lot, true f/o, predicted f/o
+        report = count_eval.summarize(rows)
+        self.assertEqual(report["overall"]["images"], 3)
+        self.assertAlmostEqual(report["overall"]["mean_abs_error_free"], 1 / 3, places=3)
+        self.assertEqual(report["A"]["exact_free_count_pct"], 50.0)
+        self.assertEqual(report["B"]["free_within_2_pct"], 100.0)
 
 
 if __name__ == "__main__":

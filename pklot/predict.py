@@ -11,7 +11,29 @@ import csv
 from pathlib import Path
 
 from .common import PROJECT_ROOT, pick_device
-from .occupancy import count_spaces
+from .occupancy import classify, count_spaces
+
+COLORS = {"free": (60, 190, 60), "occupied": (50, 50, 230)}  # BGR
+
+
+def annotate(result, occupancy):
+    """Frame with a green box per free space, a red box per occupied one, and a count banner.
+
+    Ultralytics' own result.plot() writes a label on every box, which is unreadable in a
+    100-space lot.
+    """
+    import cv2
+
+    image = result.orig_img.copy()
+    for box, cls in zip(result.boxes.xyxy.tolist(), result.boxes.cls.tolist()):
+        kind = classify(result.names[int(cls)])
+        if kind:
+            x0, y0, x1, y1 = (int(v) for v in box)
+            cv2.rectangle(image, (x0, y0), (x1, y1), COLORS[kind], 2)
+    cv2.rectangle(image, (0, 0), (image.shape[1], 40), (0, 0, 0), -1)
+    cv2.putText(image, f"{occupancy.free} free / {occupancy.occupied} occupied", (12, 29),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2, cv2.LINE_AA)
+    return image
 
 
 def parse_args(argv=None):
@@ -40,7 +62,7 @@ def main(argv=None):
                                 device=device, stream=True, verbose=False):
         name = Path(result.path).name
         occupancy = count_spaces(result.names[int(c)] for c in result.boxes.cls)
-        cv2.imwrite(str(out_dir / name), result.plot())
+        cv2.imwrite(str(out_dir / name), annotate(result, occupancy))
         print(f"{name}: {occupancy}")
         rows.append({"image": name, "free": occupancy.free, "occupied": occupancy.occupied,
                      "total": occupancy.total, "occupancy_rate": round(occupancy.rate, 4)})

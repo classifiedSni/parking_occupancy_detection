@@ -75,4 +75,52 @@ a different setup; that run is not recoverable either.
 
 ## Retrained on the official data (this repository)
 
-*Added when the run finishes.*
+Run with this repository's code on the official PKLot archive, split **by capture date**
+(train 71 days / valid 19 / test 9; see the README). The test days were never used for
+training or for choosing anything.
+
+Setup: YOLOv8s, COCO-pretrained, 30 epochs, batch 16, 352 px, one Apple M4 laptop GPU (MPS),
+3.16 hours, Ultralytics 8.4.175 / PyTorch 2.14.1. The trained weights ship in
+`weights/yolov8s_pklot.pt` (22 MB).
+
+### Detection metrics
+
+| split | precision | recall | mAP50 | mAP50-95 | space-empty mAP50-95 | space-occupied mAP50-95 |
+|---|---|---|---|---|---|---|
+| valid (19 days, 2,374 images) | 0.980 | 0.993 | 0.993 | 0.924 | 0.940 | 0.909 |
+| **test** (9 days, 1,167 images) | 0.996 | 0.996 | **0.995** | **0.906** | 0.934 | 0.879 |
+
+mAP50 reached 0.957 after one epoch and 0.99 by epoch 20. mAP50-95 was still creeping up over the last
+epochs (0.918 at epoch 25, 0.924 at epoch 29, the saved checkpoint), so more epochs or a larger model
+would gain a little.
+
+### Counting accuracy (what a "free spaces" sign actually needs)
+
+`python -m pklot.count_eval --weights weights/yolov8s_pklot.pt --split test` compares predicted
+free/occupied counts with the labelled counts, frame by frame, at confidence 0.5:
+
+| test frames | frames | spaces per frame | mean error, free count | free count exactly right | free count within +/-2 |
+|---|---|---|---|---|---|
+| all | 1,167 | 59 | 0.52 | 87.5 % | 97.2 % |
+| PUCPR | 441 | 100 | 1.18 | 86.2 % | 92.5 % |
+| UFPR04 | 320 | 28 | 0.10 | 90.3 % | 100 % |
+| UFPR05 | 406 | 40 | 0.14 | 86.7 % | 100 % |
+
+The mean error on the *occupied* count is 1.10 overall (PUCPR 2.70). PUCPR, the largest lot, is the
+hardest: its spaces are the smallest and densest (about 13 x 14 px at 352 px wide, against about
+28 x 19 px in the other two lots). Training or running at a larger image size was not evaluated.
+
+### How to read this
+
+- **Not comparable to the original YOLOv8x number (mAP50-95 0.994).** That run used a different
+  (random) split, a much larger model (`yolov8x`, 68 M parameters against 11 M) and a different export. How much of the
+  0.994 -> 0.906 gap is the stricter split and how much is the smaller model is not known; only a
+  `yolov8x` run on this split would separate them. The date split is the more trustworthy of the two.
+- **Same three cameras.** The test days are new days, not new cameras or lots. These numbers say
+  nothing about a lot the model has not seen; expect to fine-tune for one.
+- **The Detectron2 models were not retrained** (no CUDA GPU), so the corrected Faster R-CNN /
+  RetinaNet comparison is still open.
+- **A pitfall worth knowing.** Passing one long list of image paths to Ultralytics `predict()` turns
+  it into a single giant batch whose NMS step times out and silently drops detections; the first
+  version of `count_eval` did exactly that and reported counts that were 25 spaces off. It now
+  processes 16 frames at a time, and single-image predictions agree with the labels.
