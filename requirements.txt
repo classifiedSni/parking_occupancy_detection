@@ -1,0 +1,6 @@
+# YOLOv8 training / inference, dataset preparation, tests.
+# Detectron2 (Faster R-CNN / RetinaNet) is separate - see README.
+ultralytics>=8.2
+requests
+pyyaml
+pillow

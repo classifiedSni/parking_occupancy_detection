@@ -1,0 +1,24 @@
+# local-only files
+.env
+STATUS.local.md
+
+# big / regenerated
+data/
+runs/
+output/
+predictions/
+*.pt
+*.pth
+*.onnx
+# ...except the one small trained model that ships with the repo
+!weights/yolov8s_pklot.pt
+
+# private copies of the recovered originals (old notebooks with credentials in them)
+archive/
+
+# python
+__pycache__/
+.venv/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
