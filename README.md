@@ -23,6 +23,10 @@ YOLOv8s trained on the official data, split by day, evaluated on 9 held-out days
 | Free-space count within +/-2 | **97.2 %** of frames |
 | Mean error in free count | 0.52 spaces (frames average 59 spaces) |
 
+The two Detectron2 baselines, trained on the same split, score lower: **Faster R-CNN 79.4** and
+**RetinaNet 71.3** mAP50-95 against YOLOv8s's 90.6 (the original experiments' 40.6 and 37.9 came from
+a class-count bug, now fixed).
+
 Same three cameras as training; a new lot would need fine-tuning. Full tables, the original
 experiments' numbers, and the caveats are in [docs/RESULTS.md](docs/RESULTS.md).
 
@@ -79,7 +83,7 @@ written to `data/pklot/splits.json`.
 | | script | notes |
 |---|---|---|
 | YOLOv8 | `pklot/train_yolo.py` | the model used for inference; trains on a laptop GPU |
-| Faster R-CNN, RetinaNet | `pklot/train_detectron.py` | Detectron2, needs a CUDA GPU - use the Colab notebook |
+| Faster R-CNN, RetinaNet | `pklot/train_detectron.py` | Detectron2, needs a CUDA GPU - use Colab or Kaggle |
 
 ```bash
 .venv/bin/python -m pklot.train_yolo --help
@@ -127,9 +131,8 @@ tests/                        python -m unittest discover -s tests
 
 - The model is trained on three fixed cameras at 352 px. Expect to fine-tune it for a different lot,
   camera angle, or night-time footage (PKLot has daylight images only).
-- The Detectron2 scripts were rebuilt and their input data validated, but they were **not run end to
-  end** (no CUDA GPU was available), so the corrected Faster R-CNN / RetinaNet numbers are still
-  unmeasured. The YOLOv8 path was run end to end.
+- Faster R-CNN and RetinaNet were retrained once each on a free Kaggle T4 (no repeats); their weights
+  are not in this repository. The recipes are in [docs/RESULTS.md](docs/RESULTS.md).
 - The report's "future directions" (reservations, license-plate recognition, EV charging) were never
   implemented; this repository covers the detection work only.
 

@@ -44,9 +44,8 @@ The report attributes the 0.00 occupied AP to "a need for further optimization";
 configuration error. `pklot/train_detectron.py` now reads the class count from the dataset.
 
 **Consequence for the report's conclusion:** the "YOLOv8 99% vs Detectron2 45%" comparison
-is overstated. The corrected Detectron2 models will very likely score far higher than 45 -
-retraining is needed to know by how much. YOLOv8 is still plausibly the best choice
-(single-stage, 1.4 ms/image), but the size of the gap is unmeasured.
+was overstated. With the bug fixed, the Detectron2 models score 79.4 and 71.3 AP (retrained
+below), so YOLOv8 still comes out ahead, but by 11 to 19 points rather than about 50.
 
 ## Other caveats
 
@@ -118,9 +117,37 @@ hardest: its spaces are the smallest and densest (about 13 x 14 px at 352 px wid
   `yolov8x` run on this split would separate them. The date split is the more trustworthy of the two.
 - **Same three cameras.** The test days are new days, not new cameras or lots. These numbers say
   nothing about a lot the model has not seen; expect to fine-tune for one.
-- **The Detectron2 models were not retrained** (no CUDA GPU), so the corrected Faster R-CNN /
-  RetinaNet comparison is still open.
 - **A pitfall worth knowing.** Passing one long list of image paths to Ultralytics `predict()` turns
   it into a single giant batch whose NMS step times out and silently drops detections; the first
   version of `count_eval` did exactly that and reported counts that were 25 spaces off. It now
   processes 16 frames at a time, and single-image predictions agree with the labels.
+
+## Faster R-CNN and RetinaNet, retrained with the bug fixed
+
+Same data and the same held-out test days (1,167 frames) as the YOLOv8s run above, trained with
+`pklot/train_detectron.py` on a free Kaggle Tesla T4 (15 GB), Detectron2 0.6, PyTorch 2.11,
+learning rate decayed by 0.05 at 75 % of training.
+
+| model | recipe | training time | AP (0.5:0.95) | AP50 | AP75 | space-empty AP | space-occupied AP |
+|---|---|---|---|---|---|---|---|
+| Faster R-CNN R50-FPN | batch 5, 10,000 iter, lr 0.001 | 3 h 47 min | **79.4** | 97.0 | 96.1 | 81.4 | 77.3 |
+| RetinaNet R50-FPN | batch 5, 20,000 iter, lr 0.00025 | 9 h 16 min | **71.3** | 92.4 | 87.8 | 74.5 | 68.0 |
+| YOLOv8s (from above) | batch 16, 30 epochs, 352 px | 3.2 h on an M4 | **90.6** | 99.5 | n/a | 93.4 | 87.9 |
+
+Before the fix the same two Detectron2 models scored 40.6 and 37.9 AP with 0.0 on `space-occupied`.
+AP for objects in COCO's "small" size bucket is blank because no space falls in it.
+
+- **Ranking:** YOLOv8s > Faster R-CNN > RetinaNet on every metric reported for all three. This
+  supports the report's choice of YOLOv8, with a smaller margin than the original numbers implied.
+  RetinaNet is the weakest and also took the longest to train here. Inference speed of the
+  Detectron2 models was not measured.
+- **RetinaNet's recipe differs from the original run.** The original used batch 20 for 5,000
+  iterations, which does not fit in the T4's 15 GB, so batch 5 for 20,000 iterations was used
+  instead (the same 100,000 images seen) with the learning rate scaled linearly to match.
+- **Not a perfectly even comparison.** The three models were trained at different image sizes
+  (Detectron2 at its default 640-800 px short side, YOLOv8s at 352 px), for different lengths, with
+  one run each and no repeats, and YOLOv8s was scored by Ultralytics while the other two were
+  scored by pycocotools. Differences of a point or two should not be read as meaningful; the
+  11-point and 19-point gaps are large enough that the ranking is unlikely to flip.
+- **Weights are not in this repository.** They sit in the output of the private Kaggle notebooks,
+  not on GitHub.
